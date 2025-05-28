@@ -1,0 +1,25 @@
+settings.h
+#pragma once
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+
+class Settings {
+public:
+    static Settings& getInstance() {
+        static Settings instance;
+        return instance;
+    }
+
+    float getVolume() const { return volume; }
+    void setVolume(float newVolume) {
+        volume = std::min(100.0f, std::max(0.0f, newVolume));
+    }
+
+    bool isFullscreen() const { return fullscreen; }
+    void setFullscreen(bool value) { fullscreen = value; }
+
+private:
+    Settings() : volume(100.0f), fullscreen(false) {}
+    float volume;
+    bool fullscreen;
+}; 
