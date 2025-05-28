@@ -1,0 +1,153 @@
+Entities.h
+#pragma once
+#include <SFML/Graphics.hpp>
+
+class Entity {
+public:
+    sf::Sprite sprite;
+
+    virtual void draw(sf::RenderWindow& window) {
+        window.draw(sprite);
+    }
+
+    virtual sf::FloatRect getBounds() const {
+        return sprite.getGlobalBounds();
+    }
+};
+
+class Dodger : public Entity {
+private:
+    // Jump physics
+    float jumpVelocity = 0;
+    float gravity = 0.7f;           // Slightly stronger gravity for better control
+    float maxFallSpeed = 18.0f;     // Faster falling for more responsive movement
+    float initialJumpVelocity = -18.0f;  // Higher initial jump
+    float doubleJumpVelocity = -15.0f;   // Slightly lower double jump for better control
+    
+    // Jump states
+    bool isJumping = false;
+    bool canDoubleJump = false;
+    float groundLevel = 700;
+    
+    // Movement
+    bool facingRight = true;
+    
+    // Double jump cooldown
+    sf::Clock doubleJumpCooldownTimer;
+    bool doubleJumpOnCooldown = false;
+    float doubleJumpCooldownDuration = 0.8f;  // Shorter cooldown for more frequent use
+
+    // Double press detection
+    sf::Clock lastPressTimer;
+    bool wasSpacePressed = false;
+    float doublePressWindow = 0.3f;  // Time window to detect double press
+
+public:
+    Dodger(sf::Texture& texture) {
+        sprite.setTexture(texture);
+        sprite.setPosition(960, groundLevel);
+    }
+
+    void moveLeft(float speed) {
+        sprite.move(-speed, 0);
+        if (facingRight) {
+            sprite.setScale(-1.0f, 1.0f);
+            facingRight = false;
+        }
+        if (sprite.getPosition().x < 0)
+            sprite.setPosition(0, sprite.getPosition().y);
+    }
+
+    void moveRight(float speed) {
+        sprite.move(speed, 0);
+        if (!facingRight) {
+            sprite.setScale(1.0f, 1.0f);
+            facingRight = true;
+        }
+        if (sprite.getPosition().x > 1920 - sprite.getGlobalBounds().width)
+            sprite.setPosition(1920 - sprite.getGlobalBounds().width, sprite.getPosition().y);
+    }
+
+    void handleSpacePress() {
+        if (!isJumping) {
+            // Initial jump
+            jumpVelocity = initialJumpVelocity;
+            isJumping = true;
+            canDoubleJump = true;
+            wasSpacePressed = true;
+            lastPressTimer.restart();
+        }
+        else if (canDoubleJump && !doubleJumpOnCooldown) {
+            // Check for double press
+            if (wasSpacePressed && lastPressTimer.getElapsedTime().asSeconds() <= doublePressWindow) {
+                // Perform double jump
+                jumpVelocity = doubleJumpVelocity;
+                canDoubleJump = false;
+                doubleJumpOnCooldown = true;
+                doubleJumpCooldownTimer.restart();
+            }
+            wasSpacePressed = true;
+            lastPressTimer.restart();
+        }
+    }
+
+    void update() {
+        // Handle jumping physics
+        if (isJumping) {
+            // Apply gravity
+            sprite.move(0, jumpVelocity);
+            jumpVelocity += gravity;
+            
+            // Limit falling speed
+            if (jumpVelocity > maxFallSpeed) {
+                jumpVelocity = maxFallSpeed;
+            }
+            
+            // Check for landing
+            if (sprite.getPosition().y >= groundLevel) {
+                sprite.setPosition(sprite.getPosition().x, groundLevel);
+                isJumping = false;
+                jumpVelocity = 0;
+                canDoubleJump = false;
+                wasSpacePressed = false;
+            }
+        }
+
+        // Update double jump cooldown
+        if (doubleJumpOnCooldown && doubleJumpCooldownTimer.getElapsedTime().asSeconds() >= doubleJumpCooldownDuration) {
+            doubleJumpOnCooldown = false;
+        }
+    }
+
+    // Getters for jump state
+    bool isDoubleJumpOnCooldown() const { return doubleJumpOnCooldown; }
+    float getDoubleJumpCooldownRemaining() const {
+        return std::max(0.0f, doubleJumpCooldownDuration - doubleJumpCooldownTimer.getElapsedTime().asSeconds());
+    }
+    bool getIsJumping() const { return isJumping; }
+    bool getCanDoubleJump() const { return canDoubleJump && !doubleJumpOnCooldown; }
+};
+
+class Thrower : public Entity {
+public:
+    Thrower(sf::Texture& texture, float x, float y) {
+        sprite.setTexture(texture);
+        sprite.setPosition(x, y);
+    }
+};
+
+class Ball : public Entity {
+public:
+    sf::Vector2f velocity;
+
+    Ball(sf::Texture& texture, sf::Vector2f position, sf::Vector2f speed) {
+        sprite.setTexture(texture);
+        sprite.setPosition(position);
+        velocity = speed;
+    }
+
+    void update() {
+        sprite.move(velocity);
+    }
+};
+
