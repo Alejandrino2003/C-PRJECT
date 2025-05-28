@@ -1,0 +1,59 @@
+Main.cpp
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+#include "game.h"
+#include "menu.h"
+#include "entities.h"
+
+int main() {
+    // Create window based on settings
+    sf::RenderWindow window(
+        sf::VideoMode(1920, 1080),
+        "Dodgeball Game",
+        Settings::getInstance().isFullscreen() ? sf::Style::Fullscreen : sf::Style::Default
+    );
+    window.setFramerateLimit(60);
+
+    // Load all assets
+    sf::Texture backgroundTexture;
+    backgroundTexture.loadFromFile("assets/DBG.png");
+
+    sf::Texture ballTexture;
+    ballTexture.loadFromFile("assets/ball.png");
+
+    sf::Texture dodgerTexture;
+    dodgerTexture.loadFromFile("assets/DORAEMON.png");
+
+    sf::Texture throwerLeftTexture;
+    throwerLeftTexture.loadFromFile("assets/damulag.png");
+    
+    sf::Texture throwerRightTexture;
+    throwerRightTexture.loadFromFile("assets/suneo.png");
+
+    sf::Texture gameOverTexture;
+    gameOverTexture.loadFromFile("assets/gameover.jpg");
+
+    sf::SoundBuffer gameOverBuffer;
+    gameOverBuffer.loadFromFile("assets/gameover.mp3");
+    sf::Sound gameOverSound(gameOverBuffer);
+
+    sf::Music bgm;
+    bgm.openFromFile("assets/DORAEMONMUSIC.mp3");
+    bgm.setLoop(true);
+    bgm.play();
+
+    Menu menu(window, backgroundTexture);
+    Game game(window, backgroundTexture, ballTexture, dodgerTexture, throwerLeftTexture, throwerRightTexture, 
+             gameOverTexture, gameOverSound, bgm);
+
+    while (window.isOpen()) {
+        if (menu.run()) {
+            game.run();
+        }
+        else {
+            window.close();
+        }
+    }
+
+    return 0;
+}
