@@ -1,0 +1,465 @@
+game.h
+#pragma once
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+#include <vector>
+#include "entities.h"
+#include "Settings.h"
+
+class Game {
+public:
+   Game(sf::RenderWindow& window,
+       sf::Texture& bgTex,
+       sf::Texture& ballTex,
+       sf::Texture& dodgerTex,
+       sf::Texture& throwerLeftTex,
+       sf::Texture& throwerRightTex,
+       sf::Texture& gameOverTex,
+       sf::Sound& gameOverSound,
+       sf::Music& bgm);
+   void run();
+
+private:
+   sf::RenderWindow& window;
+   sf::Sprite background;
+   Dodger player;
+   Thrower throwerLeft;
+   Thrower throwerRight;
+   sf::Texture& ballTexture;
+   sf::Sprite gameOverImage;
+   std::vector<Ball> balls;
+
+   sf::Sound& gameOverSound;
+   sf::Music& bgm;
+   sf::Sound catchSound;
+
+   sf::Clock gameClock;
+   sf::Clock ballTimer;
+   sf::Clock catchCooldownTimer;
+   float ballSpeed;
+
+   bool isGameOver;
+   bool showGameOverMenu;
+   bool canCatch;
+
+   sf::Font font;
+   sf::Text restartText; 
+   sf::Text exitText;
+   sf::Text timerText;
+   sf::Text catchCooldownText;
+   sf::Text jumpCooldownText;
+   sf::Text scoreText;
+   sf::Text bestScoreText;
+   bool nextThrowerLeft = true;
+
+   int score;
+   int bestScore;
+
+   void handleInput();
+   void update();
+   void render();
+   void reset();
+   void initGameOverMenu();
+   bool handleGameOverMenu();
+   void updateCatchCooldown();
+   void updateJumpCooldown();
+   void updateScore();
+   void loadBestScore();
+   void saveBestScore();
+};
+
+game.cpp
+#include "game.h"
+#include <cstdlib>
+#include <cmath>
+#include <fstream>
+
+Game::Game(sf::RenderWindow& win, sf::Texture& bgTex, sf::Texture& ballTex,
+    sf::Texture& dodgerTex, sf::Texture& throwerLeftTex, sf::Texture& throwerRightTex,
+    sf::Texture& gameOverTex, sf::Sound& gameOverS, sf::Music& backgroundMusic)
+    : window(win), ballTexture(ballTex),
+    player(dodgerTex), throwerLeft(throwerLeftTex, 100, 700), throwerRight(throwerRightTex, 1720, 700),
+    gameOverSound(gameOverS), bgm(backgroundMusic), score(0), bestScore(0) {
+    background.setTexture(bgTex);
+    gameOverImage.setTexture(gameOverTex);
+    sf::Vector2u textureSize = gameOverTex.getSize();
+    float scaleX = 1920.0f / textureSize.x;
+    float scaleY = 1080.0f / textureSize.y;
+    gameOverImage.setScale(scaleX, scaleY);
+    gameOverImage.setPosition(0, 0);
+    ballSpeed = 3.0f;
+    isGameOver = false;
+    showGameOverMenu = false;
+    canCatch = true;
+
+    
+    sf::SoundBuffer catchBuffer;
+    if (catchBuffer.loadFromFile("assets/catch.wav")) {
+        catchSound.setBuffer(catchBuffer);
+        catchSound.setVolume(100.0f);
+    }
+
+    loadBestScore();
+    initGameOverMenu();
+}
+
+void Game::loadBestScore() {
+    std::ifstream file("bestscore.txt");
+    if (file.is_open()) {
+        file >> bestScore;
+        file.close();
+    }
+}
+
+void Game::saveBestScore() {
+    if (score > bestScore) {
+        bestScore = score;
+        std::ofstream file("bestscore.txt");
+        if (file.is_open()) {
+            file << bestScore;
+            file.close();
+        }
+    }
+}
+
+void Game::updateScore() {
+    scoreText.setString("Score: " + std::to_string(score));
+    bestScoreText.setString("Best: " + std::to_string(bestScore));
+}
+
+void Game::initGameOverMenu() {
+    if (!font.loadFromFile("assets/arayko.ttf")) {
+        return;
+    }
+    
+    restartText.setFont(font);
+    restartText.setString("Restart");
+    restartText.setCharacterSize(80);
+    restartText.setFillColor(sf::Color::Red);
+    restartText.setStyle(sf::Text::Bold);
+    restartText.setPosition(800, 450);
+
+    exitText.setFont(font);
+    exitText.setString("Exit");
+    exitText.setCharacterSize(80);
+    exitText.setFillColor(sf::Color::Red);
+    exitText.setStyle(sf::Text::Bold);
+    exitText.setPosition(800, 550);
+
+    timerText.setFont(font);
+    timerText.setCharacterSize(60);
+    timerText.setFillColor(sf::Color::Red);
+    timerText.setStyle(sf::Text::Bold);
+    timerText.setPosition(20, 20);
+
+    catchCooldownText.setFont(font);
+    catchCooldownText.setCharacterSize(40);
+    catchCooldownText.setFillColor(sf::Color::White);
+    catchCooldownText.setStyle(sf::Text::Bold);
+    catchCooldownText.setString("Catch Ready! (F)");
+    catchCooldownText.setPosition(20, 80);
+
+    jumpCooldownText.setFont(font);
+    jumpCooldownText.setCharacterSize(40);
+    jumpCooldownText.setFillColor(sf::Color::White);
+    jumpCooldownText.setStyle(sf::Text::Bold);
+    jumpCooldownText.setString("Jump Ready! (Space)");
+    jumpCooldownText.setPosition(20, 140);
+
+    scoreText.setFont(font);
+    scoreText.setCharacterSize(40);
+    scoreText.setFillColor(sf::Color::White);
+    scoreText.setStyle(sf::Text::Bold);
+    scoreText.setPosition(20, 200);
+
+    bestScoreText.setFont(font);
+    bestScoreText.setCharacterSize(40);
+    bestScoreText.setFillColor(sf::Color::White);
+    bestScoreText.setStyle(sf::Text::Bold);
+    bestScoreText.setPosition(20, 250);
+
+    updateScore();
+}
+
+bool Game::handleGameOverMenu() {
+    sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+    
+    if (restartText.getGlobalBounds().contains(mousePos.x, mousePos.y)) {
+        restartText.setFillColor(sf::Color::Yellow);
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
+            return true;
+        }
+    } else {
+        restartText.setFillColor(sf::Color::White);
+    }
+
+    if (exitText.getGlobalBounds().contains(mousePos.x, mousePos.y)) {
+        exitText.setFillColor(sf::Color::Yellow);
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
+            window.close();
+            return false;
+        }
+    } else {
+        exitText.setFillColor(sf::Color::White);
+    }
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Enter)) {
+        return 2;
+    }
+
+    return false;
+}
+
+void Game::run() {
+    reset();
+    bool gameOverSoundPlayed = false;
+    while (window.isOpen()) {
+        if (!showGameOverMenu) {
+            handleInput();
+            update();
+            render();
+        } else {
+            if (!gameOverSoundPlayed) {
+                bgm.stop();
+                gameOverSound.play();
+                gameOverSoundPlayed = true;
+                saveBestScore();
+            }
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed)
+                    window.close();
+            }
+            int menuResult = handleGameOverMenu();
+            if (menuResult == true) {
+                showGameOverMenu = false;
+                reset();
+                bgm.play();
+                gameOverSoundPlayed = false;
+            } else if (menuResult == 2) {
+                break;
+            }
+            render();
+        }
+    }
+}
+
+void Game::handleInput() {
+    sf::Event event;
+    while (window.pollEvent(event)) {
+        if (event.type == sf::Event::Closed)
+            window.close();
+        else if (event.type == sf::Event::KeyPressed) {
+            if (event.key.code == sf::Keyboard::Space) {
+                player.handleSpacePress();
+            }
+        }
+    }
+    
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+        player.moveLeft(5.f);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+        player.moveRight(5.f);
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::F) && canCatch) {
+        // Check for balls to catch
+        for (auto it = balls.begin(); it != balls.end();) {
+            sf::FloatRect ballBounds = it->getBounds();
+            sf::FloatRect playerBounds = player.getBounds();
+            
+            // Increase catch range by 20 pixels in each direction
+            float catchRange = 20.0f;
+            playerBounds.left -= catchRange;
+            playerBounds.top -= catchRange;
+            playerBounds.width += catchRange * 2;
+            playerBounds.height += catchRange * 2;
+            
+            // If ball is within catch range
+            if (ballBounds.intersects(playerBounds)) {
+                // Calculate distance to ball
+                sf::Vector2f ballCenter = sf::Vector2f(
+                    ballBounds.left + ballBounds.width / 2,
+                    ballBounds.top + ballBounds.height / 2
+                );
+                sf::Vector2f playerCenter = sf::Vector2f(
+                    playerBounds.left + playerBounds.width / 2,
+                    playerBounds.top + playerBounds.height / 2
+                );
+                
+                float distance = std::sqrt(
+                    std::pow(ballCenter.x - playerCenter.x, 2) +
+                    std::pow(ballCenter.y - playerCenter.y, 2)
+                );
+                
+                // Only catch if ball is close enough
+                if (distance <= 100.0f) {
+                    it = balls.erase(it);  // Remove the caught ball
+                    canCatch = false;  // Disable catch ability
+                    catchCooldownTimer.restart();  // Start cooldown
+                    
+                    // Play catch sound
+                    catchSound.play();
+                    
+                    // Visual feedback for successful catch
+                    catchCooldownText.setFillColor(sf::Color::Green);
+                    
+                    // Add score for catching a ball
+                    score += 10;
+                    updateScore();
+                    break;
+                } else {
+                    ++it;
+                }
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
+void Game::updateCatchCooldown() {
+    if (!canCatch) {
+        float remainingTime = 5.0f - catchCooldownTimer.getElapsedTime().asSeconds();
+        if (remainingTime <= 0.0f) {
+            canCatch = true;
+            catchCooldownText.setString("Catch Ready! (F)");
+            catchCooldownText.setFillColor(sf::Color::White);
+        } else {
+            catchCooldownText.setString("Catch Cooldown: " + std::to_string(static_cast<int>(remainingTime)) + "s");
+            // Fade the text color based on remaining time
+            float alpha = 128 + (remainingTime / 5.0f) * 127;  // Fade from 128 to 255
+            catchCooldownText.setFillColor(sf::Color(255, 255, 255, static_cast<sf::Uint8>(alpha)));
+        }
+    } else {
+        catchCooldownText.setString("Catch Ready! (F)");
+        catchCooldownText.setFillColor(sf::Color::White);
+    }
+}
+
+void Game::updateJumpCooldown() {
+    if (player.isDoubleJumpOnCooldown()) {
+        float remainingTime = player.getDoubleJumpCooldownRemaining();
+        jumpCooldownText.setString("Double Jump Cooldown: " + std::to_string(static_cast<int>(remainingTime * 10) / 10.0f) + "s");
+        jumpCooldownText.setFillColor(sf::Color(255, 100, 100));  // Red for cooldown
+    } else if (player.getIsJumping() && player.getCanDoubleJump()) {
+        jumpCooldownText.setString("Double Jump Ready! (Space)");
+        jumpCooldownText.setFillColor(sf::Color(100, 255, 100));  // Green for ready
+    } else {
+        jumpCooldownText.setString("Jump Ready! (Space)");
+        jumpCooldownText.setFillColor(sf::Color::White);
+    }
+}
+
+void Game::update() {
+    player.update();
+    updateCatchCooldown();
+    updateJumpCooldown();
+
+    int elapsed = static_cast<int>(gameClock.getElapsedTime().asSeconds());
+    timerText.setString("Time: " + std::to_string(elapsed) + "s");
+    
+    timerText.setPosition(20, 20);
+    catchCooldownText.setPosition(20, 80);
+    jumpCooldownText.setPosition(20, 140);
+
+    if (ballTimer.getElapsedTime().asSeconds() > 1.5f) {
+        bool fromLeft = nextThrowerLeft;
+        nextThrowerLeft = !nextThrowerLeft;
+        sf::Vector2f startPos = fromLeft ? sf::Vector2f(120, 700) : sf::Vector2f(1700, 700);
+        sf::Vector2f playerPos = player.sprite.getPosition();
+        sf::Vector2f direction = playerPos - startPos;
+        float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+        direction.x /= length;
+        direction.y /= length;
+        float randomFactor = 0.8f + (rand() % 40) / 100.0f;
+        sf::Vector2f speed = sf::Vector2f(direction.x * ballSpeed * randomFactor, 
+                                        direction.y * ballSpeed * randomFactor);
+        balls.emplace_back(ballTexture, startPos, speed);
+        ballTimer.restart();
+    }
+    if (gameClock.getElapsedTime().asSeconds() > 15.f) {
+        ballSpeed += 0.5f;
+        gameClock.restart();
+    }
+    for (auto& ball : balls) {
+        ball.update();
+        sf::FloatRect ballBounds = ball.getBounds();
+        sf::FloatRect playerBounds = player.getBounds();
+        
+        float ballMargin = 10.0f;
+        float playerMargin = 10.0f;
+        
+        ballBounds.left += ballMargin;
+        ballBounds.top += ballMargin;
+        ballBounds.width -= ballMargin * 2;
+        ballBounds.height -= ballMargin * 2;
+        
+        playerBounds.left += playerMargin;
+        playerBounds.top += playerMargin;
+        playerBounds.width -= playerMargin * 2;
+        playerBounds.height -= playerMargin * 2;
+        
+        if (ballBounds.intersects(playerBounds)) {
+            isGameOver = true;
+            showGameOverMenu = true;
+            return;
+        }
+    }
+}
+
+void Game::render() {
+    window.clear();
+    window.draw(background);
+    throwerLeft.draw(window);
+    throwerRight.draw(window);
+    player.draw(window);
+    for (auto& ball : balls)
+        ball.draw(window);
+    window.draw(timerText);
+    window.draw(catchCooldownText);
+    window.draw(jumpCooldownText);
+    window.draw(scoreText);
+    window.draw(bestScoreText);
+    if (showGameOverMenu) {
+        sf::RectangleShape overlay(sf::Vector2f(1920, 1080));
+        overlay.setFillColor(sf::Color(0, 0, 0, 200));
+        window.draw(overlay);
+        window.draw(gameOverImage);
+        
+        // Add final score display
+        sf::Text finalScoreText;
+        finalScoreText.setFont(font);
+        finalScoreText.setString("Final Score: " + std::to_string(score));
+        finalScoreText.setCharacterSize(60);
+        finalScoreText.setFillColor(sf::Color::White);
+        finalScoreText.setPosition(800, 350);
+        
+        sf::Text bestScoreText;
+        bestScoreText.setFont(font);
+        bestScoreText.setString("Best Score: " + std::to_string(bestScore));
+        bestScoreText.setCharacterSize(60);
+        bestScoreText.setFillColor(sf::Color::White);
+        bestScoreText.setPosition(800, 400);
+        
+        window.draw(finalScoreText);
+        window.draw(bestScoreText);
+        window.draw(restartText);
+        window.draw(exitText);
+    }
+    window.display();
+}
+void Game::reset() {
+    balls.clear();
+    ballSpeed = 3.0f;
+    gameClock.restart();
+    ballTimer.restart();
+    catchCooldownTimer.restart();
+    canCatch = true;
+    player.sprite.setPosition(960, 700);
+    isGameOver = false;
+    showGameOverMenu = false;
+    score = 0;
+    updateScore();
+}
+
