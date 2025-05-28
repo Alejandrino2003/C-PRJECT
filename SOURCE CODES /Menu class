@@ -1,0 +1,225 @@
+Menu.h
+#pragma once
+#include <SFML/Graphics.hpp>
+#include "Settings.h"
+
+class Menu {
+public:
+    Menu(sf::RenderWindow& window, sf::Texture& backgroundTexture);
+    bool run();
+
+private:
+    sf::RenderWindow& window;
+    sf::Sprite background;
+    sf::Font font;
+    sf::Text startText, bestScoreText, settingsText, exitText;
+    int selectedIndex;
+    bool inSettingsMenu;
+
+    // Settings menu elements
+    sf::Text volumeText;
+    sf::Text volumeValueText;
+    sf::Text fullscreenText;
+    sf::Text backText;
+    int settingsSelectedIndex;
+
+    void draw();
+    void drawSettings();
+    void moveUp();
+    void moveDown();
+    void handleSettingsInput();
+    void updateVolumeText();
+};
+
+
+Menu.cpp
+#include "menu.h"
+
+Menu::Menu(sf::RenderWindow& window, sf::Texture& backgroundTexture)
+    : window(window), selectedIndex(0), inSettingsMenu(false), settingsSelectedIndex(0) {
+    background.setTexture(backgroundTexture);
+    font.loadFromFile("assets/arayko.ttf");
+
+    startText.setFont(font);
+    startText.setString("Start Game");
+    startText.setCharacterSize(100);
+    startText.setPosition(300, 150);
+
+    bestScoreText.setFont(font);
+    bestScoreText.setString("Best Score");
+    bestScoreText.setCharacterSize(100);
+    bestScoreText.setPosition(300, 280);
+
+    settingsText.setFont(font);
+    settingsText.setString("Settings");
+    settingsText.setCharacterSize(100);
+    settingsText.setPosition(300, 410);
+
+    exitText.setFont(font);
+    exitText.setString("Exit");
+    exitText.setCharacterSize(100);
+    exitText.setPosition(300, 540);
+
+    volumeText.setFont(font);
+    volumeText.setString("Volume");
+    volumeText.setCharacterSize(80);
+    volumeText.setPosition(300, 150);
+
+    volumeValueText.setFont(font);
+    volumeValueText.setCharacterSize(80);
+    volumeValueText.setPosition(500, 150);
+
+    fullscreenText.setFont(font);
+    fullscreenText.setString("Fullscreen");
+    fullscreenText.setCharacterSize(80);
+    fullscreenText.setPosition(300, 280);
+
+    backText.setFont(font);
+    backText.setString("Back");
+    backText.setCharacterSize(80);
+    backText.setPosition(300, 410);
+
+    sf::Listener::setGlobalVolume(Settings::getInstance().getVolume());
+    updateVolumeText();
+}
+
+void Menu::updateVolumeText() {
+    volumeValueText.setString(std::to_string(static_cast<int>(Settings::getInstance().getVolume())) + "%");
+}
+
+void Menu::handleSettingsInput() {
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+        if (settingsSelectedIndex == 0) {
+            float newVolume = Settings::getInstance().getVolume() - 10.0f;
+            if (newVolume >= 0.0f) {
+                Settings::getInstance().setVolume(newVolume);
+                updateVolumeText();
+                sf::Listener::setGlobalVolume(newVolume);
+            }
+        }
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+        if (settingsSelectedIndex == 0) {
+            float newVolume = Settings::getInstance().getVolume() + 10.0f;
+            if (newVolume <= 100.0f) {
+                Settings::getInstance().setVolume(newVolume);
+                updateVolumeText();
+                sf::Listener::setGlobalVolume(newVolume);
+            }
+        }
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Enter)) {
+        if (settingsSelectedIndex == 1) {
+            bool newFullscreen = !Settings::getInstance().isFullscreen();
+            Settings::getInstance().setFullscreen(newFullscreen);
+            if (newFullscreen) {
+                window.create(sf::VideoMode(1920, 1080), "DodgeBall Doraemon Version", sf::Style::Fullscreen);
+            } else {
+                window.create(sf::VideoMode(1920, 1080), "Dodgeball Doraemon Version", sf::Style::Default);
+            }
+            window.setFramerateLimit(60);
+        }
+        else if (settingsSelectedIndex == 2) {
+            inSettingsMenu = false;
+        }
+    }
+}
+
+bool Menu::run() {
+    while (window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed)
+                return false;
+            if (event.type == sf::Event::KeyPressed) {
+                if (inSettingsMenu) {
+                    if (event.key.code == sf::Keyboard::Up)
+                        settingsSelectedIndex = (settingsSelectedIndex > 0) ? settingsSelectedIndex - 1 : 2;
+                    else if (event.key.code == sf::Keyboard::Down)
+                        settingsSelectedIndex = (settingsSelectedIndex < 2) ? settingsSelectedIndex + 1 : 0;
+                    handleSettingsInput();
+                }
+                else {
+                    if (event.key.code == sf::Keyboard::Up)
+                        moveUp();
+                    else if (event.key.code == sf::Keyboard::Down)
+                        moveDown();
+                    else if (event.key.code == sf::Keyboard::Enter) {
+                        switch (selectedIndex) {
+                        case 0: return true;
+                        case 1: break;
+                        case 2: inSettingsMenu = true; break;
+                        case 3: return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (inSettingsMenu)
+            drawSettings();
+        else
+            draw();
+    }
+    return false;
+}
+
+void Menu::drawSettings() {
+    window.clear();
+    window.draw(background);
+
+    sf::Color highlightColor = sf::Color::Yellow;
+    sf::Color normalColor = sf::Color::White;
+
+    volumeText.setFillColor(settingsSelectedIndex == 0 ? highlightColor : normalColor);
+    volumeValueText.setFillColor(settingsSelectedIndex == 0 ? highlightColor : normalColor);
+    fullscreenText.setFillColor(settingsSelectedIndex == 1 ? highlightColor : normalColor);
+    backText.setFillColor(settingsSelectedIndex == 2 ? highlightColor : normalColor);
+
+    if (settingsSelectedIndex == 0) {
+        volumeText.setString("Volume < >");
+    }
+    else {
+        volumeText.setString("Volume");
+    }
+
+    if (settingsSelectedIndex == 1) {
+        fullscreenText.setString("Fullscreen: " + std::string(Settings::getInstance().isFullscreen() ? "ON" : "OFF"));
+    }
+    else {
+        fullscreenText.setString("Fullscreen");
+    }
+
+    window.draw(volumeText);
+    window.draw(volumeValueText);
+    window.draw(fullscreenText);
+    window.draw(backText);
+    window.display();
+}
+
+void Menu::draw() {
+    window.clear();
+    window.draw(background);
+
+    sf::Color highlightColor = sf::Color::Yellow;
+    sf::Color normalColor = sf::Color::White;
+
+    startText.setFillColor(selectedIndex == 0 ? highlightColor : normalColor);
+    bestScoreText.setFillColor(selectedIndex == 1 ? highlightColor : normalColor);
+    settingsText.setFillColor(selectedIndex == 2 ? highlightColor : normalColor);
+    exitText.setFillColor(selectedIndex == 3 ? highlightColor : normalColor);
+
+    window.draw(startText);
+    window.draw(bestScoreText);
+    window.draw(settingsText);
+    window.draw(exitText);
+    window.display();
+}
+
+void Menu::moveUp() {
+    if (selectedIndex > 0) selectedIndex--;
+}
+
+void Menu::moveDown() {
+    if (selectedIndex < 3) selectedIndex++;
+}
